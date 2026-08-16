@@ -32,7 +32,7 @@ export default function HomeScreen() {
       <View style={styles.menu}>
         <Pressable
           style={styles.card}
-          onPress={() => router.push("/heroes")}
+          onPress={() => router.push("/(tabs)/heroes")}
         >
           <Text style={styles.icon}>⚡</Text>
 
@@ -48,12 +48,9 @@ export default function HomeScreen() {
 
           <Text style={styles.arrow}>›</Text>
         </Pressable>
-
         <Pressable
-          style={styles.card}
-          onPress={() => {
-            alert("Misiones próximamente");
-          }}
+         style={styles.card}
+         onPress={() => router.push("/(tabs)/misiones")}
         >
           <Text style={styles.icon}>🎯</Text>
 
@@ -71,11 +68,9 @@ export default function HomeScreen() {
         </Pressable>
 
         <Pressable
-          style={styles.card}
-          onPress={() => {
-            alert("Favoritos próximamente");
-          }}
-        >
+  style={styles.card}
+  onPress={() => router.push("/(tabs)/favoritos")}
+>
           <Text style={styles.icon}>★</Text>
 
           <View style={styles.cardContent}>
