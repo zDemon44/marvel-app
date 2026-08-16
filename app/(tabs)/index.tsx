@@ -1,98 +1,274 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import api from "@/services/api";
 
-export default function HomeScreen() {
+export default function LoginScreen() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert(
+        "Campos requeridos",
+        "Ingresa tu correo y contraseña."
+      );
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await api.post("/auth/login", {
+        email,
+        password,
+      });
+
+      const { token, user } = response.data;
+
+      await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+
+      router.replace("/home");
+    } catch (error: any) {
+      console.log(error);
+
+      if (error.response?.data?.message) {
+        Alert.alert(
+          "Error",
+          error.response.data.message
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          "No se pudo conectar con el servidor."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.logoContainer}>
+          <View style={styles.logo}>
+            <Text style={styles.logoText}>M</Text>
+          </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+          <Text style={styles.marvel}>MARVEL</Text>
+
+          <Text style={styles.title}>MANAGER</Text>
+
+          <Text style={styles.subtitle}>
+            Gestión de superhéroes y misiones
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Iniciar sesión
+          </Text>
+
+          <Text style={styles.cardSubtitle}>
+            Ingresa tus credenciales para continuar
+          </Text>
+
+          <Text style={styles.label}>
+            Email
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="correo@ejemplo.com"
+            placeholderTextColor="#999"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <Text style={styles.label}>
+            Contraseña
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor="#999"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <Pressable
+            style={[
+              styles.button,
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                INICIAR SESIÓN →
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
+        <Text style={styles.footer}>
+          MARVEL MANAGER • API REST • JWT
+        </Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#080808",
   },
-  stepContainer: {
-    gap: 8,
+
+  scroll: {
+    flexGrow: 1,
+    justifyContent: "center",
+    padding: 24,
+  },
+
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 35,
+  },
+
+  logo: {
+    width: 75,
+    height: 75,
+    backgroundColor: "#e62429",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+
+  logoText: {
+    color: "#fff",
+    fontSize: 48,
+    fontWeight: "900",
+  },
+
+  marvel: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 4,
+  },
+
+  title: {
+    color: "#e62429",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+
+  subtitle: {
+    color: "#aaa",
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+  },
+
+  card: {
+    backgroundColor: "#151515",
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#292929",
+  },
+
+  cardTitle: {
+    color: "#fff",
+    fontSize: 26,
+    fontWeight: "800",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+
+  cardSubtitle: {
+    color: "#999",
+    fontSize: 14,
+    marginBottom: 25,
+  },
+
+  label: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  input: {
+    backgroundColor: "#222",
+    borderWidth: 1,
+    borderColor: "#333",
+    borderRadius: 10,
+    color: "#fff",
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    fontSize: 16,
+    marginBottom: 18,
+  },
+
+  button: {
+    backgroundColor: "#e62429",
+    paddingVertical: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+
+  buttonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  footer: {
+    color: "#666",
+    textAlign: "center",
+    fontSize: 11,
+    marginTop: 25,
+    letterSpacing: 1,
   },
 });
