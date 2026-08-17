@@ -13,14 +13,23 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import api from "@/services/api";
+
 import {
   getFavorites,
   addFavorite,
   removeFavorite,
 } from "@/services/favorites";
+
 import HeroFormModal from "@/components/HeroFormModal";
-import { colors } from "@/constants/theme";
+
+import {
+  colors,
+  radii,
+} from "@/constants/theme";
 
 interface Heroe {
   id: number;
@@ -33,23 +42,80 @@ interface Heroe {
 }
 
 export default function HeroesScreen() {
+  // ==========================================
+  // ESTADOS
+  // ==========================================
+
   const [heroes, setHeroes] = useState<Heroe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
-  const [heroeSeleccionado, setHeroeSeleccionado] = useState<Heroe | null>(null);
-  const [formModalVisible, setFormModalVisible] = useState(false);
-  const [heroeEdicion, setHeroeEdicion] = useState<Heroe | null>(null);
 
-  const cargarHeroes = async (isRefresh: boolean | any = false) => {
+  const [heroeSeleccionado, setHeroeSeleccionado] =
+    useState<Heroe | null>(null);
+
+  const [formModalVisible, setFormModalVisible] =
+    useState(false);
+
+  const [heroeEdicion, setHeroeEdicion] =
+    useState<Heroe | null>(null);
+
+  // ==========================================
+  // USUARIO / ROL
+  // ==========================================
+
+  const [userRole, setUserRole] = useState("");
+
+  const isAdmin = userRole === "ADMIN";
+
+  // ==========================================
+  // CARGAR USUARIO
+  // ==========================================
+
+  const cargarUsuario = async () => {
     try {
-      isRefresh ? setRefreshing(true) : setLoading(true);
+      const raw = await AsyncStorage.getItem("user");
+
+      if (raw) {
+        const user = JSON.parse(raw);
+
+        setUserRole(user?.rol ?? "");
+      }
+    } catch (error) {
+      console.error(
+        "Error cargando usuario:",
+        error
+      );
+    }
+  };
+
+  // ==========================================
+  // CARGAR HÉROES
+  // ==========================================
+
+  const cargarHeroes = async (
+    isRefresh = false
+  ) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
+
       const response = await api.get("/heroes");
+
       setHeroes(response.data.data || []);
     } catch (error: any) {
+      console.error(
+        "Error cargando héroes:",
+        error
+      );
+
       setError(
         error.response?.data?.message ||
           "No se pudieron cargar los superhéroes."
@@ -60,84 +126,232 @@ export default function HeroesScreen() {
     }
   };
 
+  // ==========================================
+  // CARGAR FAVORITOS
+  // ==========================================
+
   const cargarFavoritos = async () => {
     try {
       const favoritos = await getFavorites();
-      setFavoriteIds(favoritos.map((hero: Heroe) => hero.id));
+
+      setFavoriteIds(
+        favoritos.map(
+          (hero: Heroe) => hero.id
+        )
+      );
     } catch (error) {
-      console.log("Error cargando favoritos:", error);
+      console.log(
+        "Error cargando favoritos:",
+        error
+      );
     }
   };
 
-  const toggleFavorito = async (heroe: Heroe) => {
-    const esFavorito = favoriteIds.includes(heroe.id);
-    if (esFavorito) {
-      await removeFavorite(heroe.id);
-      setFavoriteIds((prev) => prev.filter((id) => id !== heroe.id));
-    } else {
-      await addFavorite(heroe);
-      setFavoriteIds((prev) => [...prev, heroe.id]);
+  // ==========================================
+  // FAVORITOS
+  // ==========================================
+
+  const toggleFavorito = async (
+    heroe: Heroe
+  ) => {
+    try {
+      const esFavorito =
+        favoriteIds.includes(heroe.id);
+
+      if (esFavorito) {
+        await removeFavorite(heroe.id);
+
+        setFavoriteIds((prev) =>
+          prev.filter(
+            (id) => id !== heroe.id
+          )
+        );
+      } else {
+        await addFavorite(heroe);
+
+        setFavoriteIds((prev) => [
+          ...prev,
+          heroe.id,
+        ]);
+      }
+    } catch (error) {
+      console.error(
+        "Error cambiando favorito:",
+        error
+      );
     }
   };
+
+  // ==========================================
+  // CREAR HÉROE
+  // ==========================================
 
   const abrirFormularioCrear = () => {
+    if (!isAdmin) {
+      Alert.alert(
+        "Acceso denegado",
+        "Solo los administradores pueden crear superhéroes."
+      );
+
+      return;
+    }
+
     setHeroeEdicion(null);
     setFormModalVisible(true);
   };
 
-  const abrirFormularioEditar = (heroe: Heroe) => {
+  // ==========================================
+  // EDITAR HÉROE
+  // ==========================================
+
+  const abrirFormularioEditar = (
+    heroe: Heroe
+  ) => {
+    if (!isAdmin) {
+      Alert.alert(
+        "Acceso denegado",
+        "Solo los administradores pueden editar superhéroes."
+      );
+
+      return;
+    }
+
     setHeroeEdicion(heroe);
     setFormModalVisible(true);
     setHeroeSeleccionado(null);
   };
 
-  const eliminarHeroe = async (heroeId: number, nombreHeroe: string) => {
+  // ==========================================
+  // ELIMINAR HÉROE
+  // ==========================================
+
+  const eliminarHeroe = async (
+    heroeId: number,
+    nombreHeroe: string
+  ) => {
+    if (!isAdmin) {
+      Alert.alert(
+        "Acceso denegado",
+        "Solo los administradores pueden eliminar superhéroes."
+      );
+
+      return;
+    }
+
     Alert.alert(
       "Confirmar eliminación",
       `¿Estás seguro de que deseas eliminar a ${nombreHeroe}?`,
       [
-        { text: "Cancelar", onPress: () => {}, style: "cancel" },
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
         {
           text: "Eliminar",
+          style: "destructive",
+
           onPress: async () => {
             try {
-              await api.delete(`/heroes/${heroeId}`);
-              Alert.alert("Éxito", "Superhéroe eliminado correctamente");
-              cargarHeroes();
+              await api.delete(
+                `/heroes/${heroeId}`
+              );
+
+              Alert.alert(
+                "Éxito",
+                "Superhéroe eliminado correctamente."
+              );
+
+              await cargarHeroes();
+
               setHeroeSeleccionado(null);
             } catch (error: any) {
-              Alert.alert("Error", error.response?.data?.message || "Error al eliminar");
+              console.error(error);
+
+              Alert.alert(
+                "Error",
+                error.response?.data?.message ||
+                  "Error al eliminar el superhéroe."
+              );
             }
           },
-          style: "destructive",
         },
       ]
     );
   };
 
+  // ==========================================
+  // INICIALIZACIÓN
+  // ==========================================
+
   useEffect(() => {
+    cargarUsuario();
     cargarHeroes();
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    cargarFavoritos();
-  }, []));
+  // ==========================================
+  // FAVORITOS AL VOLVER
+  // ==========================================
 
-  const renderHeroe = ({ item }: { item: Heroe }) => {
-    const esFavorito = favoriteIds.includes(item.id);
+  useFocusEffect(
+    useCallback(() => {
+      cargarFavoritos();
+    }, [])
+  );
+
+  // ==========================================
+  // RENDER HÉROE
+  // ==========================================
+
+  const renderHeroe = ({
+    item,
+  }: {
+    item: Heroe;
+  }) => {
+    const esFavorito =
+      favoriteIds.includes(item.id);
+
     return (
       <Pressable
-        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-        onPress={() => setHeroeSeleccionado(item)}
+        style={({ pressed }) => [
+          styles.card,
+          pressed && styles.cardPressed,
+        ]}
+        onPress={() =>
+          setHeroeSeleccionado(item)
+        }
       >
+        {/* ================= IMAGEN ================= */}
+
         <View style={styles.imageContainer}>
           {item.imagen_url ? (
-            <Image source={{ uri: item.imagen_url }} style={styles.image} />
+            <Image
+              source={{
+                uri: item.imagen_url,
+              }}
+              style={styles.image}
+            />
           ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.placeholderText}>MARVEL</Text>
+            <View
+              style={styles.imagePlaceholder}
+            >
+              <Feather
+                name="shield"
+                size={42}
+                color={colors.red}
+              />
+
+              <Text
+                style={
+                  styles.placeholderText
+                }
+              >
+                MARVEL
+              </Text>
             </View>
           )}
+
+          {/* FAVORITO */}
+
           <Pressable
             style={styles.favoriteButton}
             onPress={(event) => {
@@ -145,307 +359,1729 @@ export default function HeroesScreen() {
               toggleFavorito(item);
             }}
           >
-            <Text style={[styles.favoriteIcon, esFavorito && styles.favoriteActive]}>
-              {esFavorito ? "★" : "☆"}
-            </Text>
+            <Feather
+              name={
+                esFavorito
+                  ? "star"
+                  : "star"
+              }
+              size={22}
+              color={
+                esFavorito
+                  ? colors.gold
+                  : "#fff"
+              }
+            />
           </Pressable>
-          <View style={[styles.statusBadge, item.estado === "ACTIVO" ? styles.activeBadge : styles.inactiveBadge]}>
-            <View style={[styles.statusDot, item.estado === "ACTIVO" ? styles.activeDot : styles.inactiveDot]} />
-            <Text style={[styles.statusText, item.estado === "ACTIVO" ? styles.activeText : styles.inactiveText]}>
+
+          {/* ESTADO */}
+
+          <View
+            style={[
+              styles.statusBadge,
+              item.estado === "ACTIVO"
+                ? styles.activeBadge
+                : styles.inactiveBadge,
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                item.estado === "ACTIVO"
+                  ? styles.activeDot
+                  : styles.inactiveDot,
+              ]}
+            />
+
+            <Text
+              style={[
+                styles.statusText,
+                item.estado === "ACTIVO"
+                  ? styles.activeText
+                  : styles.inactiveText,
+              ]}
+            >
               {item.estado}
             </Text>
           </View>
+
+          {/* NIVEL DE PODER */}
+
           <View style={styles.powerBadge}>
-            <Text style={styles.powerBadgeNumber}>{item.nivel_poder}</Text>
-            <Text style={styles.powerBadgeText}>PODER</Text>
+            <Text
+              style={styles.powerBadgeNumber}
+            >
+              {item.nivel_poder}
+            </Text>
+
+            <Text
+              style={styles.powerBadgeText}
+            >
+              PODER
+            </Text>
           </View>
         </View>
+
+        {/* ================= INFORMACIÓN ================= */}
+
         <View style={styles.info}>
-          <Text style={styles.name}>{item.nombre}</Text>
-          <Text style={styles.realName}>{item.nombre_real}</Text>
+          <Text
+            style={styles.name}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.nombre}
+          </Text>
+
+          <Text
+            style={styles.realName}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {item.nombre_real}
+          </Text>
+
           <View style={styles.divider} />
-          <Text style={styles.powerLabel}>PODER PRINCIPAL</Text>
-          <Text style={styles.power}>{item.poder_principal}</Text>
+
+          <Text style={styles.powerLabel}>
+            PODER PRINCIPAL
+          </Text>
+
+          <Text
+            style={styles.power}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {item.poder_principal}
+          </Text>
+
           <View style={styles.powerHeader}>
-            <Text style={styles.powerTitle}>NIVEL DE PODER</Text>
-            <Text style={styles.powerValue}>{item.nivel_poder}/100</Text>
+            <Text style={styles.powerTitle}>
+              NIVEL DE PODER
+            </Text>
+
+            <Text style={styles.powerValue}>
+              {item.nivel_poder}/100
+            </Text>
           </View>
-          <View style={styles.progressBackground}>
-            <View style={[styles.progressBar, { width: `${Math.min(item.nivel_poder, 100)}%` }]} />
+
+          <View
+            style={styles.progressBackground}
+          >
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  width: `${Math.min(
+                    item.nivel_poder,
+                    100
+                  )}%`,
+                },
+              ]}
+            />
           </View>
+
           <View style={styles.detailsRow}>
-            <Text style={styles.detailsText}>ID #{item.id}</Text>
-            <Text style={styles.detailsAction}>VER DETALLES ›</Text>
+            <Text style={styles.detailsText}>
+              ID #{item.id}
+            </Text>
+
+            <View
+              style={styles.detailsActionBox}
+            >
+              <Text
+                style={styles.detailsAction}
+              >
+                VER DETALLES
+              </Text>
+
+              <Feather
+                name="arrow-right"
+                size={13}
+                color={colors.red}
+              />
+            </View>
           </View>
         </View>
       </Pressable>
     );
   };
 
-  if (loading && heroes.length === 0) {
+  // ==========================================
+  // LOADING
+  // ==========================================
+
+  if (
+    loading &&
+    heroes.length === 0
+  ) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView
+        style={styles.center}
+        edges={["top"]}
+      >
         <View style={styles.loadingLogo}>
-          <Text style={styles.loadingLogoText}>M</Text>
+          <Text
+            style={styles.loadingLogoText}
+          >
+            M
+          </Text>
         </View>
-        <ActivityIndicator size="large" color="#e62429" />
-        <Text style={styles.loadingTitle}>Cargando superhéroes</Text>
-        <Text style={styles.loadingText}>Conectando con Marvel API...</Text>
-      </View>
+
+        <ActivityIndicator
+          size="large"
+          color={colors.red}
+        />
+
+        <Text style={styles.loadingTitle}>
+          Cargando superhéroes
+        </Text>
+
+        <Text style={styles.loadingText}>
+          Conectando con Marvel API...
+        </Text>
+      </SafeAreaView>
     );
   }
 
-  if (error && heroes.length === 0) {
+  // ==========================================
+  // ERROR
+  // ==========================================
+
+  if (
+    error &&
+    heroes.length === 0
+  ) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorIcon}>!</Text>
-        <Text style={styles.errorTitle}>Error</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retryButton} onPress={() => cargarHeroes(false)}>
-          <Text style={styles.retryText}>REINTENTAR</Text>
+      <SafeAreaView
+        style={styles.center}
+        edges={["top"]}
+      >
+        <View style={styles.errorIcon}>
+          <Feather
+            name="alert-triangle"
+            size={26}
+            color={colors.red}
+          />
+        </View>
+
+        <Text style={styles.errorTitle}>
+          Algo salió mal
+        </Text>
+
+        <Text style={styles.errorText}>
+          {error}
+        </Text>
+
+        <Pressable
+          style={styles.retryButton}
+          onPress={() =>
+            cargarHeroes(false)
+          }
+        >
+          <Text style={styles.retryText}>
+            REINTENTAR
+          </Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
+
+  // ==========================================
+  // PANTALLA PRINCIPAL
+  // ==========================================
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSmall}>MARVEL</Text>
-          <Text style={styles.headerTitle}>SUPERHÉROES</Text>
-          <Text style={styles.headerSubtitle}>{heroes.length} héroes registrados</Text>
-        </View>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeNumber}>{heroes.length}</Text>
-          <Text style={styles.headerBadgeText}>HÉROES</Text>
-        </View>
-      </View>
-
+    <SafeAreaView
+      style={styles.container}
+      edges={["top"]}
+    >
       <FlatList
         data={heroes}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) =>
+          item.id.toString()
+        }
         renderItem={renderHeroe}
-        contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          styles.list
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => cargarHeroes(true)}
-            tintColor="#e62429"
-            colors={["#e62429"]}
+            onRefresh={() =>
+              cargarHeroes(true)
+            }
+            tintColor={colors.red}
+            colors={[colors.red]}
           />
+        }
+        ListHeaderComponent={
+          <View style={styles.header}>
+            {/* CABECERA */}
+
+            <View style={styles.headerTop}>
+              <View
+                style={styles.headerTitleArea}
+              >
+                <Text
+                  style={styles.headerSmall}
+                >
+                  MARVEL MANAGER
+                </Text>
+
+                <Text
+                  style={styles.headerTitle}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  SUPERHÉROES
+                </Text>
+
+                <Text
+                  style={
+                    styles.headerSubtitle
+                  }
+                  numberOfLines={1}
+                >
+                  {heroes.length}{" "}
+                  {heroes.length === 1
+                    ? "héroe"
+                    : "héroes"}{" "}
+                  registrados
+                </Text>
+              </View>
+
+              <View
+                style={styles.headerBadge}
+              >
+                <Feather
+                  name="shield"
+                  size={18}
+                  color="#fff"
+                />
+
+                <Text
+                  style={
+                    styles.headerBadgeNumber
+                  }
+                >
+                  {heroes.length}
+                </Text>
+
+                <Text
+                  style={
+                    styles.headerBadgeText
+                  }
+                >
+                  HÉROES
+                </Text>
+              </View>
+            </View>
+
+            {/* INFORMACIÓN DE ROL */}
+
+            <View style={styles.roleRow}>
+              <View
+                style={styles.roleIcon}
+              >
+                <Feather
+                  name={
+                    isAdmin
+                      ? "shield"
+                      : "eye"
+                  }
+                  size={13}
+                  color={colors.red}
+                />
+              </View>
+
+              <Text
+                style={styles.roleText}
+              >
+                {isAdmin
+                  ? "ADMINISTRADOR"
+                  : "MODO CONSULTA"}
+              </Text>
+            </View>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>?</Text>
-            <Text style={styles.emptyTitle}>No hay superhéroes</Text>
-            <Text style={styles.emptyText}>La API todavía no contiene héroes registrados.</Text>
+            <View
+              style={styles.emptyIcon}
+            >
+              <Feather
+                name="users"
+                size={25}
+                color={colors.red}
+              />
+            </View>
+
+            <Text
+              style={styles.emptyTitle}
+            >
+              No hay superhéroes
+            </Text>
+
+            <Text
+              style={styles.emptyText}
+            >
+              La API todavía no contiene
+              héroes registrados.
+            </Text>
           </View>
         }
       />
 
+      {/* ========================================
+          MODAL DE DETALLES
+      ======================================== */}
+
       <Modal
-        visible={heroeSeleccionado !== null}
+        visible={
+          heroeSeleccionado !== null
+        }
         transparent
         animationType="fade"
-        onRequestClose={() => setHeroeSeleccionado(null)}
+        onRequestClose={() =>
+          setHeroeSeleccionado(null)
+        }
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalBackground} onPress={() => setHeroeSeleccionado(null)} />
+        <View
+          style={styles.modalOverlay}
+        >
+          <Pressable
+            style={styles.modalBackground}
+            onPress={() =>
+              setHeroeSeleccionado(null)
+            }
+          />
+
           {heroeSeleccionado && (
-            <View style={styles.detailCard}>
-              <Pressable style={styles.closeButton} onPress={() => setHeroeSeleccionado(null)}>
-                <Text style={styles.closeButtonText}>×</Text>
+            <View
+              style={styles.detailCard}
+            >
+              {/* CERRAR */}
+
+              <Pressable
+                style={styles.closeButton}
+                onPress={() =>
+                  setHeroeSeleccionado(
+                    null
+                  )
+                }
+              >
+                <Feather
+                  name="x"
+                  size={20}
+                  color="#fff"
+                />
               </Pressable>
-              <View style={styles.detailImageContainer}>
+
+              {/* IMAGEN */}
+
+              <View
+                style={
+                  styles.detailImageContainer
+                }
+              >
                 {heroeSeleccionado.imagen_url ? (
-                  <Image source={{ uri: heroeSeleccionado.imagen_url }} style={styles.detailImage} />
+                  <Image
+                    source={{
+                      uri: heroeSeleccionado.imagen_url,
+                    }}
+                    style={
+                      styles.detailImage
+                    }
+                  />
                 ) : (
-                  <View style={styles.detailImagePlaceholder}>
-                    <Text style={styles.placeholderText}>MARVEL</Text>
+                  <View
+                    style={
+                      styles.detailImagePlaceholder
+                    }
+                  >
+                    <Feather
+                      name="shield"
+                      size={50}
+                      color={colors.red}
+                    />
+
+                    <Text
+                      style={
+                        styles.placeholderText
+                      }
+                    >
+                      MARVEL
+                    </Text>
                   </View>
                 )}
-                <View style={styles.detailImageOverlay} />
-                <View style={styles.detailHeroName}>
-                  <Text style={styles.detailName}>{heroeSeleccionado.nombre}</Text>
-                  <Text style={styles.detailRealName}>{heroeSeleccionado.nombre_real}</Text>
+
+                <View
+                  style={
+                    styles.detailImageOverlay
+                  }
+                />
+
+                <View
+                  style={
+                    styles.detailHeroName
+                  }
+                >
+                  <Text
+                    style={
+                      styles.detailName
+                    }
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {
+                      heroeSeleccionado.nombre
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.detailRealName
+                    }
+                    numberOfLines={1}
+                  >
+                    {
+                      heroeSeleccionado.nombre_real
+                    }
+                  </Text>
                 </View>
               </View>
-              <View style={styles.detailContent}>
-                <Text style={styles.detailSectionTitle}>INFORMACIÓN DEL HÉROE</Text>
-                <Pressable style={styles.modalFavoriteButton} onPress={() => toggleFavorito(heroeSeleccionado)}>
-                  <Text style={styles.modalFavoriteIcon}>{favoriteIds.includes(heroeSeleccionado.id) ? "★" : "☆"}</Text>
-                  <Text style={styles.modalFavoriteText}>{favoriteIds.includes(heroeSeleccionado.id) ? "EN FAVORITOS" : "AGREGAR A FAVORITOS"}</Text>
+
+              {/* CONTENIDO */}
+
+              <View
+                style={styles.detailContent}
+              >
+                <Text
+                  style={
+                    styles.detailSectionTitle
+                  }
+                >
+                  INFORMACIÓN DEL HÉROE
+                </Text>
+
+                {/* FAVORITO */}
+
+                <Pressable
+                  style={
+                    styles.modalFavoriteButton
+                  }
+                  onPress={() =>
+                    toggleFavorito(
+                      heroeSeleccionado
+                    )
+                  }
+                >
+                  <Feather
+                    name="star"
+                    size={19}
+                    color={
+                      favoriteIds.includes(
+                        heroeSeleccionado.id
+                      )
+                        ? colors.gold
+                        : "#fff"
+                    }
+                  />
+
+                  <Text
+                    style={
+                      styles.modalFavoriteText
+                    }
+                  >
+                    {favoriteIds.includes(
+                      heroeSeleccionado.id
+                    )
+                      ? "EN FAVORITOS"
+                      : "AGREGAR A FAVORITOS"}
+                  </Text>
                 </Pressable>
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>⚡ PODER PRINCIPAL</Text>
-                  <Text style={styles.detailValue}>{heroeSeleccionado.poder_principal}</Text>
+
+                {/* PODER */}
+
+                <View
+                  style={styles.detailItem}
+                >
+                  <Text
+                    style={
+                      styles.detailLabel
+                    }
+                  >
+                    PODER PRINCIPAL
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.detailValue
+                    }
+                    numberOfLines={3}
+                  >
+                    {
+                      heroeSeleccionado.poder_principal
+                    }
+                  </Text>
                 </View>
-                <View style={styles.detailItem}>
-                  <View style={styles.detailPowerHeader}>
-                    <Text style={styles.detailLabel}>💥 NIVEL DE PODER</Text>
-                    <Text style={styles.detailPowerValue}>{heroeSeleccionado.nivel_poder}/100</Text>
+
+                {/* NIVEL */}
+
+                <View
+                  style={styles.detailItem}
+                >
+                  <View
+                    style={
+                      styles.detailPowerHeader
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.detailLabel
+                      }
+                    >
+                      NIVEL DE PODER
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.detailPowerValue
+                      }
+                    >
+                      {
+                        heroeSeleccionado.nivel_poder
+                      }
+                      /100
+                    </Text>
                   </View>
-                  <View style={styles.detailProgressBackground}>
-                    <View style={[styles.detailProgressBar, { width: `${Math.min(heroeSeleccionado.nivel_poder, 100)}%` }]} />
+
+                  <View
+                    style={
+                      styles.detailProgressBackground
+                    }
+                  >
+                    <View
+                      style={[
+                        styles.detailProgressBar,
+                        {
+                          width: `${Math.min(
+                            heroeSeleccionado.nivel_poder,
+                            100
+                          )}%`,
+                        },
+                      ]}
+                    />
                   </View>
                 </View>
-                <View style={styles.detailRow}>
-                  <View>
-                    <Text style={styles.detailLabel}>ESTADO</Text>
-                    <Text style={styles.detailSmallText}>Estado actual del héroe</Text>
+
+                {/* ESTADO */}
+
+                <View
+                  style={styles.detailRow}
+                >
+                  <View
+                    style={
+                      styles.detailStatusInfo
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.detailLabel
+                      }
+                    >
+                      ESTADO
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.detailSmallText
+                      }
+                    >
+                      Estado actual del héroe
+                    </Text>
                   </View>
-                  <View style={[styles.detailStatus, heroeSeleccionado.estado === "ACTIVO" ? styles.detailActive : styles.detailInactive]}>
-                    <View style={[styles.detailStatusDot, heroeSeleccionado.estado === "ACTIVO" ? styles.detailActiveDot : styles.detailInactiveDot]} />
-                    <Text style={[styles.detailStatusText, heroeSeleccionado.estado === "ACTIVO" ? styles.detailActiveText : styles.detailInactiveText]}>
-                      {heroeSeleccionado.estado}
+
+                  <View
+                    style={[
+                      styles.detailStatus,
+                      heroeSeleccionado.estado ===
+                      "ACTIVO"
+                        ? styles.detailActive
+                        : styles.detailInactive,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.detailStatusDot,
+                        heroeSeleccionado.estado ===
+                        "ACTIVO"
+                          ? styles.detailActiveDot
+                          : styles.detailInactiveDot,
+                      ]}
+                    />
+
+                    <Text
+                      style={[
+                        styles.detailStatusText,
+                        heroeSeleccionado.estado ===
+                        "ACTIVO"
+                          ? styles.detailActiveText
+                          : styles.detailInactiveText,
+                      ]}
+                    >
+                      {
+                        heroeSeleccionado.estado
+                      }
                     </Text>
                   </View>
                 </View>
-                <View style={styles.detailIdContainer}>
-                  <Text style={styles.detailIdLabel}>IDENTIFICADOR</Text>
-                  <Text style={styles.detailId}>#{heroeSeleccionado.id}</Text>
+
+                {/* ID */}
+
+                <View
+                  style={
+                    styles.detailIdContainer
+                  }
+                >
+                  <Text
+                    style={
+                      styles.detailIdLabel
+                    }
+                  >
+                    IDENTIFICADOR
+                  </Text>
+
+                  <Text
+                    style={styles.detailId}
+                  >
+                    #{heroeSeleccionado.id}
+                  </Text>
                 </View>
-                <Pressable style={styles.closeMainButton} onPress={() => setHeroeSeleccionado(null)}>
-                  <Text style={styles.closeMainButtonText}>CERRAR</Text>
+
+                {/* CERRAR */}
+
+                <Pressable
+                  style={
+                    styles.closeMainButton
+                  }
+                  onPress={() =>
+                    setHeroeSeleccionado(
+                      null
+                    )
+                  }
+                >
+                  <Text
+                    style={
+                      styles.closeMainButtonText
+                    }
+                  >
+                    CERRAR
+                  </Text>
                 </Pressable>
-                <View style={styles.actionButtons}>
-                  <Pressable style={styles.editButton} onPress={() => abrirFormularioEditar(heroeSeleccionado)}>
-                    <Feather name="edit-2" size={16} color="#fff" />
-                    <Text style={styles.editButtonText}>EDITAR</Text>
-                  </Pressable>
-                  <Pressable style={styles.deleteButton} onPress={() => eliminarHeroe(heroeSeleccionado.id, heroeSeleccionado.nombre)}>
-                    <Feather name="trash-2" size={16} color="#fff" />
-                    <Text style={styles.deleteButtonText}>ELIMINAR</Text>
-                  </Pressable>
-                </View>
+
+                {/* ACCIONES ADMIN */}
+
+                {isAdmin && (
+                  <View
+                    style={
+                      styles.actionButtons
+                    }
+                  >
+                    <Pressable
+                      style={
+                        styles.editButton
+                      }
+                      onPress={() =>
+                        abrirFormularioEditar(
+                          heroeSeleccionado
+                        )
+                      }
+                    >
+                      <Feather
+                        name="edit-2"
+                        size={15}
+                        color="#fff"
+                      />
+
+                      <Text
+                        style={
+                          styles.editButtonText
+                        }
+                      >
+                        EDITAR
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={
+                        styles.deleteButton
+                      }
+                      onPress={() =>
+                        eliminarHeroe(
+                          heroeSeleccionado.id,
+                          heroeSeleccionado.nombre
+                        )
+                      }
+                    >
+                      <Feather
+                        name="trash-2"
+                        size={15}
+                        color="#fff"
+                      />
+
+                      <Text
+                        style={
+                          styles.deleteButtonText
+                        }
+                      >
+                        ELIMINAR
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             </View>
           )}
         </View>
       </Modal>
 
-      <HeroFormModal
-        visible={formModalVisible}
-        onClose={() => setFormModalVisible(false)}
-        onSuccess={() => {
-          cargarHeroes();
-          cargarFavoritos();
-        }}
-        heroe={heroeEdicion}
-      />
+      {/* ========================================
+          FORMULARIO CREAR / EDITAR
+      ======================================== */}
 
-      <Pressable style={styles.createButton} onPress={abrirFormularioCrear}>
-        <Feather name="plus" size={24} color="#fff" />
-      </Pressable>
-    </View>
+      {isAdmin && (
+        <HeroFormModal
+          visible={formModalVisible}
+          onClose={() =>
+            setFormModalVisible(false)
+          }
+          onSuccess={() => {
+            cargarHeroes();
+            cargarFavoritos();
+          }}
+          heroe={heroeEdicion}
+        />
+      )}
+
+      {/* ========================================
+          BOTÓN CREAR
+      ======================================== */}
+
+      {isAdmin && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.createButton,
+            pressed &&
+              styles.createButtonPressed,
+          ]}
+          onPress={abrirFormularioCrear}
+        >
+          <Feather
+            name="plus"
+            size={25}
+            color="#fff"
+          />
+        </Pressable>
+      )}
+    </SafeAreaView>
   );
 }
 
+// =====================================================
+// ESTILOS
+// =====================================================
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#080808" },
-  header: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: "#0d0d0d", borderBottomWidth: 1, borderBottomColor: "#242424", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  headerSmall: { color: "#e62429", fontSize: 13, fontWeight: "900", letterSpacing: 4 },
-  headerTitle: { color: "#ffffff", fontSize: 30, fontWeight: "900", marginTop: 3, letterSpacing: 1 },
-  headerSubtitle: { color: "#777", fontSize: 13, marginTop: 5 },
-  headerBadge: { width: 58, height: 58, borderRadius: 29, backgroundColor: "#e62429", justifyContent: "center", alignItems: "center" },
-  headerBadgeNumber: { color: "#ffffff", fontSize: 20, fontWeight: "900" },
-  headerBadgeText: { color: "#ffffff", fontSize: 7, fontWeight: "900", letterSpacing: 1 },
-  list: { padding: 16, paddingBottom: 30 },
-  card: { backgroundColor: "#151515", borderRadius: 18, marginBottom: 18, overflow: "hidden", borderWidth: 1, borderColor: "#292929", shadowColor: "#000", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5 },
-  cardPressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-  imageContainer: { width: "100%", height: 245, backgroundColor: "#222", position: "relative" },
-  image: { width: "100%", height: "100%", resizeMode: "cover" },
-  imagePlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#202020" },
-  placeholderText: { color: "#e62429", fontSize: 30, fontWeight: "900", letterSpacing: 3 },
-  favoriteButton: { position: "absolute", top: 14, right: 14, width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(0,0,0,0.78)", justifyContent: "center", alignItems: "center", zIndex: 10 },
-  favoriteIcon: { color: "#ffffff", fontSize: 30 },
-  favoriteActive: { color: "#FFD700" },
-  statusBadge: { position: "absolute", top: 14, left: 14, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, flexDirection: "row", alignItems: "center" },
-  activeBadge: { backgroundColor: "rgba(15, 70, 25, 0.95)" },
-  inactiveBadge: { backgroundColor: "rgba(80, 20, 20, 0.95)" },
-  statusDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
-  activeDot: { backgroundColor: "#65d66f" },
-  inactiveDot: { backgroundColor: "#ff5c5c" },
-  statusText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
-  activeText: { color: "#7ee787" },
-  inactiveText: { color: "#ff8585" },
-  powerBadge: { position: "absolute", right: 14, bottom: 14, width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(0,0,0,0.85)", borderWidth: 2, borderColor: "#e62429", justifyContent: "center", alignItems: "center" },
-  powerBadgeNumber: { color: "#ffffff", fontSize: 19, fontWeight: "900" },
-  powerBadgeText: { color: "#e62429", fontSize: 7, fontWeight: "900", letterSpacing: 1 },
-  info: { padding: 17 },
-  name: { color: "#ffffff", fontSize: 24, fontWeight: "900" },
-  realName: { color: "#777", fontSize: 14, marginTop: 3 },
-  divider: { height: 1, backgroundColor: "#292929", marginVertical: 14 },
-  powerLabel: { color: "#e62429", fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
-  power: { color: "#dddddd", fontSize: 15, marginTop: 6, lineHeight: 21 },
-  powerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 17, marginBottom: 7 },
-  powerTitle: { color: "#999", fontSize: 12, fontWeight: "600" },
-  powerValue: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
-  progressBackground: { width: "100%", height: 7, backgroundColor: "#2a2a2a", borderRadius: 10, overflow: "hidden" },
-  progressBar: { height: "100%", backgroundColor: "#e62429", borderRadius: 10 },
-  detailsRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 },
-  detailsText: { color: "#555", fontSize: 11, fontWeight: "700" },
-  detailsAction: { color: "#e62429", fontSize: 10, fontWeight: "900", letterSpacing: 0.7 },
-  center: { flex: 1, backgroundColor: "#080808", justifyContent: "center", alignItems: "center", padding: 25 },
-  loadingLogo: { width: 70, height: 70, backgroundColor: "#e62429", borderRadius: 10, justifyContent: "center", alignItems: "center", marginBottom: 25 },
-  loadingLogoText: { color: "#ffffff", fontSize: 44, fontWeight: "900" },
-  loadingTitle: { color: "#ffffff", fontSize: 20, fontWeight: "800", marginTop: 15 },
-  loadingText: { color: "#777", fontSize: 13, marginTop: 6 },
-  errorIcon: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: "#e62429", color: "#e62429", fontSize: 32, fontWeight: "900", textAlign: "center", lineHeight: 56, marginBottom: 18 },
-  errorTitle: { color: "#ffffff", fontSize: 24, fontWeight: "900", marginBottom: 8 },
-  errorText: { color: "#888", textAlign: "center", fontSize: 14, lineHeight: 21 },
-  retryButton: { backgroundColor: "#e62429", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 9, marginTop: 22 },
-  retryText: { color: "#ffffff", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
-  empty: { alignItems: "center", paddingTop: 100, paddingHorizontal: 30 },
-  emptyIcon: { width: 55, height: 55, borderRadius: 28, backgroundColor: "#222", color: "#e62429", fontSize: 28, fontWeight: "900", textAlign: "center", lineHeight: 55 },
-  emptyTitle: { color: "#ffffff", fontSize: 20, fontWeight: "800", marginTop: 18 },
-  emptyText: { color: "#777", textAlign: "center", marginTop: 7, lineHeight: 20 },
-  modalOverlay: { flex: 1, justifyContent: "center", alignItems: "center", padding: 18 },
-  modalBackground: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0, 0, 0, 0.88)" },
-  detailCard: { width: "100%", maxWidth: 430, backgroundColor: "#151515", borderRadius: 20, overflow: "hidden", borderWidth: 1, borderColor: "#303030", elevation: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.6, shadowRadius: 15 },
-  closeButton: { position: "absolute", right: 14, top: 14, zIndex: 20, width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0, 0, 0, 0.75)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#555" },
-  closeButtonText: { color: "#fff", fontSize: 27, fontWeight: "300", lineHeight: 30 },
-  detailImageContainer: { width: "100%", height: 280, position: "relative", backgroundColor: "#222" },
-  detailImage: { width: "100%", height: "100%", resizeMode: "cover" },
-  detailImagePlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#222" },
-  detailImageOverlay: { position: "absolute", left: 0, right: 0, bottom: 0, height: 130, backgroundColor: "rgba(0, 0, 0, 0.55)" },
-  detailHeroName: { position: "absolute", left: 20, bottom: 18, right: 60 },
-  detailName: { color: "#fff", fontSize: 30, fontWeight: "900" },
-  detailRealName: { color: "#bbb", fontSize: 14, marginTop: 3 },
-  detailContent: { padding: 20 },
-  detailSectionTitle: { color: "#e62429", fontSize: 11, fontWeight: "900", letterSpacing: 1.5, marginBottom: 18 },
-  modalFavoriteButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#222", borderWidth: 1, borderColor: "#333", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 20 },
-  modalFavoriteIcon: { color: "#FFD700", fontSize: 23, marginRight: 10 },
-  modalFavoriteText: { color: "#fff", fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
-  detailItem: { marginBottom: 18 },
-  detailLabel: { color: "#888", fontSize: 10, fontWeight: "900", letterSpacing: 1, marginBottom: 6 },
-  detailValue: { color: "#fff", fontSize: 16, lineHeight: 22 },
-  detailPowerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  detailPowerValue: { color: "#e62429", fontSize: 16, fontWeight: "900" },
-  detailProgressBackground: { width: "100%", height: 9, backgroundColor: "#2a2a2a", borderRadius: 10, overflow: "hidden" },
-  detailProgressBar: { height: "100%", backgroundColor: "#e62429", borderRadius: 10 },
-  detailRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 5 },
-  detailSmallText: { color: "#555", fontSize: 11, marginTop: 2 },
-  detailStatus: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  detailActive: { backgroundColor: "#163016" },
-  detailInactive: { backgroundColor: "#351515" },
-  detailStatusDot: { width: 7, height: 7, borderRadius: 4, marginRight: 7 },
-  detailActiveDot: { backgroundColor: "#65d66f" },
-  detailInactiveDot: { backgroundColor: "#ff5c5c" },
-  detailStatusText: { fontSize: 10, fontWeight: "900" },
-  detailActiveText: { color: "#7ee787" },
-  detailInactiveText: { color: "#ff8585" },
-  detailIdContainer: { marginTop: 18, paddingTop: 15, borderTopWidth: 1, borderTopColor: "#292929", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  detailIdLabel: { color: "#555", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  detailId: { color: "#888", fontSize: 13, fontWeight: "800" },
-  closeMainButton: { backgroundColor: "#e62429", borderRadius: 10, paddingVertical: 14, alignItems: "center", marginTop: 20 },
-  closeMainButtonText: { color: "#fff", fontSize: 12, fontWeight: "900", letterSpacing: 1.2 },
-  actionButtons: { flexDirection: "row", gap: 12, marginTop: 14 },
-  editButton: { flex: 1, backgroundColor: "#3f7fd1", borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  editButtonText: { color: "#fff", fontSize: 11, fontWeight: "900", letterSpacing: 0.8 },
-  deleteButton: { flex: 1, backgroundColor: "#e62429", borderRadius: 10, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  deleteButtonText: { color: "#fff", fontSize: 11, fontWeight: "900", letterSpacing: 0.8 },
-  createButton: { position: "absolute", bottom: 30, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: "#e62429", justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  // ===================================================
+  // GENERAL
+  // ===================================================
+
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+
+  center: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+
+  list: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 100,
+  },
+
+  // ===================================================
+  // HEADER
+  // ===================================================
+
+  header: {
+    marginBottom: 20,
+  },
+
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  headerTitleArea: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 14,
+  },
+
+  headerSmall: {
+    color: colors.red,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginBottom: 6,
+  },
+
+  headerTitle: {
+    color: colors.text,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  headerSubtitle: {
+    color: colors.textMuted,
+    fontSize: 12.5,
+    marginTop: 6,
+  },
+
+  headerBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: radii.md,
+    backgroundColor: colors.red,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+
+  headerBadgeNumber: {
+    color: "#fff",
+    fontSize: 19,
+    fontWeight: "900",
+    marginTop: 1,
+  },
+
+  headerBadgeText: {
+    color: "#fff",
+    fontSize: 7,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  roleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginTop: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radii.sm,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+  },
+
+  roleIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: colors.redSoft,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+
+  roleText: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ===================================================
+  // CARD
+  // ===================================================
+
+  card: {
+    backgroundColor: colors.panel,
+    borderRadius: radii.lg,
+    marginBottom: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+
+    shadowColor: colors.ink,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+
+    elevation: 4,
+  },
+
+  cardPressed: {
+    opacity: 0.92,
+    transform: [
+      {
+        scale: 0.985,
+      },
+    ],
+  },
+
+  // ===================================================
+  // IMAGEN
+  // ===================================================
+
+  imageContainer: {
+    width: "100%",
+    height: 235,
+    backgroundColor: colors.ink,
+    position: "relative",
+  },
+
+  image: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  imagePlaceholder: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.ink,
+  },
+
+  placeholderText: {
+    color: colors.red,
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 3,
+    marginTop: 8,
+  },
+
+  // ===================================================
+  // FAVORITO
+  // ===================================================
+
+  favoriteButton: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+
+  // ===================================================
+  // ESTADO
+  // ===================================================
+
+  statusBadge: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  activeBadge: {
+    backgroundColor: "rgba(20,70,30,0.94)",
+  },
+
+  inactiveBadge: {
+    backgroundColor: "rgba(90,25,25,0.94)",
+  },
+
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+
+  activeDot: {
+    backgroundColor: colors.green,
+  },
+
+  inactiveDot: {
+    backgroundColor: colors.red,
+  },
+
+  statusText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+
+  activeText: {
+    color: "#7ee787",
+  },
+
+  inactiveText: {
+    color: "#ff8585",
+  },
+
+  // ===================================================
+  // POWER BADGE
+  // ===================================================
+
+  powerBadge: {
+    position: "absolute",
+    right: 14,
+    bottom: 14,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "rgba(0,0,0,0.86)",
+    borderWidth: 2,
+    borderColor: colors.red,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  powerBadgeNumber: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  powerBadgeText: {
+    color: colors.red,
+    fontSize: 7,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ===================================================
+  // INFO
+  // ===================================================
+
+  info: {
+    padding: 18,
+  },
+
+  name: {
+    color: colors.text,
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "900",
+  },
+
+  realName: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: colors.panelBorder,
+    marginVertical: 14,
+  },
+
+  powerLabel: {
+    color: colors.red,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+
+  power: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+
+  // ===================================================
+  // POWER
+  // ===================================================
+
+  powerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 17,
+    marginBottom: 7,
+  },
+
+  powerTitle: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+
+  powerValue: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  progressBackground: {
+    width: "100%",
+    height: 7,
+    backgroundColor: colors.panelBorder,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+
+  progressBar: {
+    height: "100%",
+    backgroundColor: colors.red,
+    borderRadius: 10,
+  },
+
+  // ===================================================
+  // DETAILS
+  // ===================================================
+
+  detailsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+  },
+
+  detailsText: {
+    color: colors.textFaint,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  detailsActionBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+
+  detailsAction: {
+    color: colors.red,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+
+  // ===================================================
+  // LOADING
+  // ===================================================
+
+  loadingLogo: {
+    width: 68,
+    height: 68,
+    borderRadius: radii.md,
+    backgroundColor: colors.red,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  loadingLogoText: {
+    color: "#fff",
+    fontSize: 42,
+    fontWeight: "900",
+  },
+
+  loadingTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 15,
+  },
+
+  loadingText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+
+  // ===================================================
+  // ERROR
+  // ===================================================
+
+  errorIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.redSoft,
+    borderWidth: 1.5,
+    borderColor: colors.red,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  errorTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  errorText: {
+    color: colors.textMuted,
+    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 20,
+    maxWidth: 320,
+  },
+
+  retryButton: {
+    backgroundColor: colors.red,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: radii.sm,
+    marginTop: 22,
+  },
+
+  retryText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ===================================================
+  // EMPTY
+  // ===================================================
+
+  empty: {
+    alignItems: "center",
+    paddingTop: 80,
+    paddingHorizontal: 30,
+  },
+
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.redSoft,
+    borderWidth: 1,
+    borderColor: colors.red,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 19,
+    fontWeight: "900",
+    marginTop: 18,
+  },
+
+  emptyText: {
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: 7,
+    lineHeight: 20,
+    fontSize: 13,
+  },
+
+  // ===================================================
+  // MODAL
+  // ===================================================
+
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 18,
+  },
+
+  modalBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.88)",
+  },
+
+  detailCard: {
+    width: "100%",
+    maxWidth: 430,
+    maxHeight: "92%",
+    backgroundColor: colors.panel,
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+
+    shadowColor: colors.ink,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.45,
+    shadowRadius: 15,
+
+    elevation: 12,
+  },
+
+  closeButton: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    zIndex: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+
+  // ===================================================
+  // DETAIL IMAGE
+  // ===================================================
+
+  detailImageContainer: {
+    width: "100%",
+    height: 265,
+    position: "relative",
+    backgroundColor: colors.ink,
+  },
+
+  detailImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  detailImagePlaceholder: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.ink,
+  },
+
+  detailImageOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 140,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+
+  detailHeroName: {
+    position: "absolute",
+    left: 20,
+    bottom: 18,
+    right: 60,
+  },
+
+  detailName: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "900",
+  },
+
+  detailRealName: {
+    color: "#bbb",
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  // ===================================================
+  // DETAIL CONTENT
+  // ===================================================
+
+  detailContent: {
+    padding: 20,
+  },
+
+  detailSectionTitle: {
+    color: colors.red,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginBottom: 16,
+  },
+
+  modalFavoriteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.ink,
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+    borderRadius: radii.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+  },
+
+  modalFavoriteText: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    marginLeft: 10,
+  },
+
+  detailItem: {
+    marginBottom: 18,
+  },
+
+  detailLabel: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+
+  detailValue: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+
+  detailPowerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  detailPowerValue: {
+    color: colors.red,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  detailProgressBackground: {
+    width: "100%",
+    height: 8,
+    backgroundColor: colors.panelBorder,
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+
+  detailProgressBar: {
+    height: "100%",
+    backgroundColor: colors.red,
+    borderRadius: 10,
+  },
+
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 5,
+  },
+
+  detailStatusInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  detailSmallText: {
+    color: colors.textFaint,
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  detailStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginLeft: 12,
+  },
+
+  detailActive: {
+    backgroundColor: colors.greenSoft,
+  },
+
+  detailInactive: {
+    backgroundColor: colors.redSoft,
+  },
+
+  detailStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 7,
+  },
+
+  detailActiveDot: {
+    backgroundColor: colors.green,
+  },
+
+  detailInactiveDot: {
+    backgroundColor: colors.red,
+  },
+
+  detailStatusText: {
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  detailActiveText: {
+    color: colors.green,
+  },
+
+  detailInactiveText: {
+    color: colors.red,
+  },
+
+  detailIdContainer: {
+    marginTop: 18,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: colors.panelBorder,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  detailIdLabel: {
+    color: colors.textFaint,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  detailId: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  // ===================================================
+  // MODAL BUTTONS
+  // ===================================================
+
+  closeMainButton: {
+    backgroundColor: colors.red,
+    borderRadius: radii.sm,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginTop: 20,
+  },
+
+  closeMainButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+
+  actionButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  editButton: {
+    flex: 1,
+    backgroundColor: colors.blue,
+    borderRadius: radii.sm,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  editButtonText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  deleteButton: {
+    flex: 1,
+    backgroundColor: colors.red,
+    borderRadius: radii.sm,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  // ===================================================
+  // CREATE BUTTON
+  // ===================================================
+
+  createButton: {
+    position: "absolute",
+    right: 20,
+    bottom: 25,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.red,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    justifyContent: "center",
+    alignItems: "center",
+
+    shadowColor: colors.ink,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+
+    elevation: 8,
+  },
+
+  createButtonPressed: {
+    opacity: 0.75,
+    transform: [
+      {
+        scale: 0.94,
+      },
+    ],
+  },
 });

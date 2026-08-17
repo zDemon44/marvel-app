@@ -19,7 +19,22 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
+  (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+
+  async (error) => {
+    if (error?.response?.status === 401) {
+      console.log("401 detectado: sesión expirada");
+
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("user");
+
+      error.sessionExpired = true;
+    }
+
     return Promise.reject(error);
   }
 );

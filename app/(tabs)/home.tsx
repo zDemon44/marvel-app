@@ -14,8 +14,11 @@ import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { colors, radii } from "@/constants/theme";
-import { Tag, HardShadowCard } from "@/components/UI";
-import { BarList, DonutChart, ChartLegend } from "@/components/Charts";
+import {
+  BarList,
+  DonutChart,
+  ChartLegend,
+} from "@/components/Charts";
 import api from "@/services/api";
 
 type Hero = {
@@ -47,18 +50,24 @@ const STATUS_COLOR: Record<Mision["estado"], string> = {
 export default function HomeScreen() {
   const router = useRouter();
 
+  // ==========================================
+  // ESTADOS
+  // ==========================================
+
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [misiones, setMisiones] = useState<Mision[]>([]);
-  const [userName, setUserName] = useState<string>("");
-  const [userRole, setUserRole] = useState<string>("");
+
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  // =========================
+  // ==========================================
   // CARGAR USUARIO
-  // =========================
+  // ==========================================
+
   const cargarUsuario = async () => {
     try {
       const raw = await AsyncStorage.getItem("user");
@@ -74,9 +83,10 @@ export default function HomeScreen() {
     }
   };
 
-  // =========================
+  // ==========================================
   // LOGOUT
-  // =========================
+  // ==========================================
+
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem("token");
@@ -88,10 +98,12 @@ export default function HomeScreen() {
     }
   };
 
-  // =========================
+  // ==========================================
   // CARGAR DASHBOARD
-  // =========================
-  const cargarDashboard = useCallback(async (isRefresh = false) => {
+  // ==========================================
+
+const cargarDashboard = useCallback(
+  async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -101,222 +113,358 @@ export default function HomeScreen() {
 
       setError("");
 
-      const [heroesResponse, misionesResponse] = await Promise.all([
+      const [
+        heroesResponse,
+        misionesResponse,
+      ] = await Promise.all([
         api.get("/heroes"),
         api.get("/misiones"),
       ]);
 
-      setHeroes(heroesResponse.data.data);
-      setMisiones(misionesResponse.data.data);
-    } catch (err) {
+      setHeroes(heroesResponse.data.data || []);
+      setMisiones(misionesResponse.data.data || []);
+
+    } catch (err: any) {
+
+      // ==========================================
+      // SI ES 401 -> IR DIRECTAMENTE AL LOGIN
+      // ==========================================
+
+      if (
+        err?.response?.status === 401 ||
+        err?.sessionExpired === true
+      ) {
+        router.replace("/login");
+        return;
+      }
+
+      // ==========================================
+      // OTROS ERRORES
+      // ==========================================
+
       console.error("Error dashboard:", err);
 
-      setError("No se pudieron cargar los datos del dashboard.");
+      setError(
+        "No se pudieron cargar los datos del dashboard."
+      );
+
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  },
+  [router]
+);
 
-  // =========================
-  // INICIALIZAR
-  // =========================
+  // ==========================================
+  // INICIALIZACIÓN
+  // ==========================================
+
   useEffect(() => {
     cargarUsuario();
     cargarDashboard();
   }, [cargarDashboard]);
 
-  // =========================
-  // MISIONES POR SUPERHÉROE
-  // =========================
+  // ==========================================
+  // ESTADÍSTICAS
+  // ==========================================
+
+  const heroesActivos = heroes.filter(
+    (hero) => hero.estado === "ACTIVO"
+  ).length;
+
+  const misionesCompletadas =
+    misiones.filter(
+      (mision) =>
+        mision.estado === "COMPLETADA"
+    ).length;
+
+  // ==========================================
+  // MISIONES POR HÉROE
+  // ==========================================
+
   const misionesPorHeroe = heroes
     .map((hero) => ({
       label: hero.nombre,
       value: misiones.filter(
-        (m) => Number(m.superheroe_id) === Number(hero.id)
+        (mision) =>
+          Number(mision.superheroe_id) ===
+          Number(hero.id)
       ).length,
     }))
-    .filter((h) => h.value > 0)
+    .filter((hero) => hero.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
 
-  // =========================
+  // ==========================================
   // ESTADO DE MISIONES
-  // =========================
+  // ==========================================
+
   const misionesPorEstado = [
     {
       label: "Pendientes",
-      value: misiones.filter((m) => m.estado === "PENDIENTE").length,
+      value: misiones.filter(
+        (mision) =>
+          mision.estado === "PENDIENTE"
+      ).length,
       color: colors.gold,
     },
     {
       label: "En progreso",
-      value: misiones.filter((m) => m.estado === "EN_PROGRESO").length,
+      value: misiones.filter(
+        (mision) =>
+          mision.estado === "EN_PROGRESO"
+      ).length,
       color: colors.blue,
     },
     {
       label: "Completadas",
-      value: misiones.filter((m) => m.estado === "COMPLETADA").length,
+      value: misiones.filter(
+        (mision) =>
+          mision.estado === "COMPLETADA"
+      ).length,
       color: colors.green,
     },
   ];
 
-  // =========================
-  // ESTADÍSTICAS
-  // =========================
-  const heroesActivos = heroes.filter(
-    (h) => h.estado === "ACTIVO"
-  ).length;
+  // ==========================================
+  // MISIONES RECIENTES
+  // ==========================================
 
-  const misionesCompletadas = misiones.filter(
-    (m) => m.estado === "COMPLETADA"
-  ).length;
+  const misionesRecientes =
+    misiones.slice(0, 5);
 
-  const misionesRecientes = misiones.slice(0, 5);
-
-  // =========================
+  // ==========================================
   // LOADING
-  // =========================
-  if (loading) {
+  // ==========================================
+
+  if (
+    loading &&
+    heroes.length === 0 &&
+    misiones.length === 0
+  ) {
     return (
       <SafeAreaView
-        style={[styles.screen, styles.centered]}
+        style={styles.center}
         edges={["top"]}
       >
+        <View style={styles.loadingLogo}>
+          <Text
+            style={styles.loadingLogoText}
+          >
+            M
+          </Text>
+        </View>
+
         <ActivityIndicator
           size="large"
           color={colors.red}
         />
 
+        <Text style={styles.loadingTitle}>
+          Cargando dashboard
+        </Text>
+
         <Text style={styles.loadingText}>
-          Cargando dashboard...
+          Conectando con Marvel API...
         </Text>
       </SafeAreaView>
     );
   }
 
-  // =========================
+  // ==========================================
   // ERROR
-  // =========================
-  if (error) {
+  // ==========================================
+
+  if (
+    error &&
+    heroes.length === 0 &&
+    misiones.length === 0
+  ) {
     return (
       <SafeAreaView
-        style={[
-          styles.screen,
-          styles.centered,
-          { padding: 24 },
-        ]}
+        style={styles.center}
         edges={["top"]}
       >
-        <HardShadowCard>
-          <View style={styles.errorBox}>
-            <Text style={styles.errorTitle}>
-              Algo salió mal
-            </Text>
+        <View style={styles.errorIcon}>
+          <Feather
+            name="alert-triangle"
+            size={26}
+            color={colors.red}
+          />
+        </View>
 
-            <Text style={styles.errorText}>
-              {error}
-            </Text>
+        <Text style={styles.errorTitle}>
+          Algo salió mal
+        </Text>
 
-            <Pressable
-              style={styles.retryButton}
-              onPress={() => cargarDashboard()}
-            >
-              <Text style={styles.retryButtonText}>
-                Reintentar
-              </Text>
-            </Pressable>
-          </View>
-        </HardShadowCard>
+        <Text style={styles.errorText}>
+          {error}
+        </Text>
+
+        <Pressable
+          style={styles.retryButton}
+          onPress={() =>
+            cargarDashboard(false)
+          }
+        >
+          <Text style={styles.retryText}>
+            REINTENTAR
+          </Text>
+        </Pressable>
       </SafeAreaView>
     );
   }
 
-  // =========================
-  // DASHBOARD
-  // =========================
+  // ==========================================
+  // PANTALLA PRINCIPAL
+  // ==========================================
+
   return (
     <SafeAreaView
-      style={styles.screen}
+      style={styles.container}
       edges={["top"]}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => cargarDashboard(true)}
+            onRefresh={() =>
+              cargarDashboard(true)
+            }
             tintColor={colors.red}
+            colors={[colors.red]}
           />
         }
       >
-        {/* ================= HEADER ================= */}
+        {/* ========================================
+            HEADER
+        ======================================== */}
 
         <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Tag style={{ marginBottom: 10 }}>
-              MARVEL MANAGER
-            </Tag>
 
-            <Text style={styles.title}>
-              DASHBOARD
-            </Text>
-          </View>
+          {/* COLUMNA IZQUIERDA + COLUMNA DERECHA */}
 
-          {/* USUARIO + LOGOUT */}
+          <View style={styles.headerLayout}>
 
-          <View style={styles.headerActions}>
-            {!!userName && (
-              <View style={styles.userChip}>
-                <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>
-                    {userName
-                      .charAt(0)
-                      .toUpperCase()}
-                  </Text>
+            {/* ====================================
+                IZQUIERDA
+            ==================================== */}
+
+            <View style={styles.headerLeft}>
+
+              <Text style={styles.headerSmall}>
+                MARVEL MANAGER
+              </Text>
+
+              <Text
+                style={styles.headerTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
+                DASHBOARD
+              </Text>
+
+              <Text
+                style={styles.headerSubtitle}
+                numberOfLines={1}
+              >
+                Resumen general del sistema
+              </Text>
+
+              {/* MODO CONSULTA */}
+
+              <View style={styles.roleRow}>
+                <View style={styles.roleIcon}>
+                  <Feather
+                    name={
+                      userRole === "ADMIN"
+                        ? "shield"
+                        : "eye"
+                    }
+                    size={13}
+                    color={colors.red}
+                  />
                 </View>
 
-                <View>
-                  <Text
-                    style={styles.userName}
-                    numberOfLines={1}
-                  >
-                    {userName}
+                <View style={styles.roleInfo}>
+                  <Text style={styles.roleText}>
+                    {userRole === "ADMIN"
+                      ? "ADMINISTRADOR"
+                      : "MODO CONSULTA"}
                   </Text>
 
-                  <Text style={styles.userRole}>
-                    {userRole}
-                  </Text>
+                  {userName ? (
+                    <Text
+                      style={styles.userWelcome}
+                      numberOfLines={1}
+                    >
+                      {userName}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
-            )}
+            </View>
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.logoutButton,
-                pressed &&
-                  styles.logoutPressed,
-              ]}
-              onPress={handleLogout}
-            >
-              <Feather
-                name="log-out"
-                size={18}
-                color="#fff"
-              />
-            </Pressable>
+            {/* ====================================
+                DERECHA
+            ==================================== */}
+
+            <View style={styles.headerRight}>
+
+              {/* LOGOUT */}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.logoutButton,
+                  pressed &&
+                    styles.logoutPressed,
+                ]}
+                onPress={handleLogout}
+              >
+                <Feather
+                  name="log-out"
+                  size={16}
+                  color="#fff"
+                />
+              </Pressable>
+
+              {/* DATOS */}
+
+              <View style={styles.headerBadge}>
+                <Feather
+                  name="activity"
+                  size={18}
+                  color="#fff"
+                />
+
+                <Text
+                  style={
+                    styles.headerBadgeNumber
+                  }
+                >
+                  {heroes.length +
+                    misiones.length}
+                </Text>
+
+                <Text
+                  style={
+                    styles.headerBadgeText
+                  }
+                >
+                  DATOS
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* ================= SUBTITLE ================= */}
-
-        <Text style={styles.subtitle}>
-          Bienvenido de nuevo
-          {userName ? `, ${userName}` : ""}.
-          Aquí tienes un resumen del sistema.
-        </Text>
-
-        {/* ================= STATS ================= */}
+        {/* ========================================
+            ESTADÍSTICAS
+        ======================================== */}
 
         <View style={styles.statsGrid}>
           <StatCard
@@ -352,151 +500,291 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* ================= BARRAS ================= */}
+        {/* ========================================
+            MISIONES POR SUPERHÉROE
+        ======================================== */}
 
-        <HardShadowCard
-          style={styles.sectionCard}
-          contentStyle={styles.sectionContent}
-        >
-          <Tag style={styles.sectionTag}>
-            ASIGNACIÓN
-          </Tag>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionContent}>
+            <Text
+              style={styles.sectionLabel}
+            >
+              ASIGNACIÓN
+            </Text>
 
-          <Text style={styles.sectionTitle}>
-            Misiones por superhéroe
-          </Text>
+            <Text
+              style={styles.sectionTitle}
+            >
+              MISIONES POR SUPERHÉROE
+            </Text>
 
-          <Text style={styles.sectionSubtitle}>
-            Misiones asignadas actualmente
-          </Text>
+            <Text
+              style={styles.sectionSubtitle}
+            >
+              Misiones asignadas actualmente
+            </Text>
 
-          <View style={{ marginTop: 20 }}>
-            <BarList
-              data={misionesPorHeroe}
-              color={colors.red}
-            />
-          </View>
-        </HardShadowCard>
+            <View style={styles.divider} />
 
-        {/* ================= DONUT ================= */}
+            <View
+              style={styles.chartContainer}
+            >
+              {misionesPorHeroe.length > 0 ? (
+                <BarList
+                  data={misionesPorHeroe}
+                  color={colors.red}
+                />
+              ) : (
+                <View
+                  style={styles.emptyChart}
+                >
+                  <Feather
+                    name="bar-chart-2"
+                    size={25}
+                    color={colors.red}
+                  />
 
-        <HardShadowCard
-          style={styles.sectionCard}
-          contentStyle={styles.sectionContent}
-        >
-          <Tag style={styles.sectionTag}>
-            ESTADO
-          </Tag>
+                  <Text
+                    style={
+                      styles.emptyChartTitle
+                    }
+                  >
+                    Sin asignaciones
+                  </Text>
 
-          <Text style={styles.sectionTitle}>
-            Estado de misiones
-          </Text>
-
-          <Text style={styles.sectionSubtitle}>
-            Distribución actual
-          </Text>
-
-          <View style={styles.donutRow}>
-            <DonutChart
-              data={misionesPorEstado}
-            />
-
-            <View style={{ flex: 1 }}>
-              <ChartLegend
-                data={misionesPorEstado}
-              />
+                  <Text
+                    style={
+                      styles.emptyChartText
+                    }
+                  >
+                    Todavía no existen
+                    misiones asignadas a
+                    superhéroes.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
-        </HardShadowCard>
+        </View>
 
-        {/* ================= MISIONES RECIENTES ================= */}
+        {/* ========================================
+            ESTADO DE MISIONES
+        ======================================== */}
 
-        <HardShadowCard
-          style={styles.sectionCard}
-          contentStyle={styles.sectionContent}
-        >
-          <Tag style={styles.sectionTag}>
-            ACTIVIDAD
-          </Tag>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionContent}>
+            <Text
+              style={styles.sectionLabel}
+            >
+              ESTADO
+            </Text>
 
-          <Text style={styles.sectionTitle}>
-            Misiones recientes
-          </Text>
+            <Text
+              style={styles.sectionTitle}
+            >
+              ESTADO DE MISIONES
+            </Text>
 
-          <Text style={styles.sectionSubtitle}>
-            Últimas misiones registradas
-          </Text>
+            <Text
+              style={styles.sectionSubtitle}
+            >
+              Distribución actual
+            </Text>
 
-          <View style={styles.missionsList}>
-            {misionesRecientes.length === 0 && (
-              <Text style={styles.emptyText}>
-                Todavía no hay misiones registradas.
-              </Text>
-            )}
+            <View style={styles.divider} />
 
-            {misionesRecientes.map(
-              (mision, index) => (
-                <View
-                  key={mision.id}
-                  style={[
-                    styles.missionRow,
-                    index ===
-                      misionesRecientes.length -
-                        1 && {
-                      borderBottomWidth: 0,
-                    },
-                  ]}
-                >
+            <View style={styles.donutRow}>
+              <View
+                style={
+                  styles.donutContainer
+                }
+              >
+                <DonutChart
+                  data={misionesPorEstado}
+                />
+              </View>
+
+              <View
+                style={
+                  styles.legendContainer
+                }
+              >
+                <ChartLegend
+                  data={misionesPorEstado}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ========================================
+            MISIONES RECIENTES
+        ======================================== */}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionContent}>
+            <Text
+              style={styles.sectionLabel}
+            >
+              ACTIVIDAD
+            </Text>
+
+            <Text
+              style={styles.sectionTitle}
+            >
+              MISIONES RECIENTES
+            </Text>
+
+            <Text
+              style={styles.sectionSubtitle}
+            >
+              Últimas misiones registradas
+            </Text>
+
+            <View style={styles.divider} />
+
+            <View
+              style={styles.missionsList}
+            >
+              {misionesRecientes.length === 0 && (
+                <View style={styles.empty}>
                   <View
-                    style={styles.missionIcon}
+                    style={styles.emptyIcon}
                   >
                     <Feather
                       name="target"
-                      size={16}
-                      color={colors.text}
+                      size={25}
+                      color={colors.red}
                     />
                   </View>
 
-                  <View
-                    style={{
-                      flex: 1,
-                      marginLeft: 12,
-                    }}
+                  <Text
+                    style={styles.emptyTitle}
                   >
-                    <Text
-                      style={styles.missionTitle}
-                      numberOfLines={1}
-                    >
-                      {mision.titulo}
-                    </Text>
+                    No hay misiones
+                  </Text>
 
-                    <Text
-                      style={
-                        styles.missionLocation
-                      }
-                      numberOfLines={1}
-                    >
-                      {mision.ubicacion}
-                    </Text>
-                  </View>
-
-                  <Tag
-                    style={{
-                      backgroundColor:
-                        STATUS_COLOR[
-                          mision.estado
-                        ],
-                    }}
+                  <Text
+                    style={styles.emptyText}
                   >
-                    {STATUS_LABEL[
-                      mision.estado
-                    ]}
-                  </Tag>
+                    Todavía no hay misiones
+                    registradas.
+                  </Text>
                 </View>
-              )
-            )}
+              )}
+
+              {misionesRecientes.map(
+                (mision, index) => (
+                  <View
+                    key={mision.id}
+                    style={[
+                      styles.missionRow,
+                      index ===
+                        misionesRecientes.length -
+                          1 && {
+                        borderBottomWidth: 0,
+                      },
+                    ]}
+                  >
+                    {/* ICONO */}
+
+                    <View
+                      style={
+                        styles.missionIcon
+                      }
+                    >
+                      <Feather
+                        name="target"
+                        size={16}
+                        color={colors.red}
+                      />
+                    </View>
+
+                    {/* INFORMACIÓN */}
+
+                    <View
+                      style={
+                        styles.missionInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.missionTitle
+                        }
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {mision.titulo}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.missionLocation
+                        }
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {mision.ubicacion}
+                      </Text>
+                    </View>
+
+                    {/* ESTADO */}
+
+                    <View
+                      style={
+                        styles.missionStatus
+                      }
+                    >
+                      <View
+                        style={[
+                          styles.statusTag,
+                          {
+                            backgroundColor:
+                              STATUS_COLOR[
+                                mision.estado
+                              ],
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={
+                            styles.statusTagText
+                          }
+                          numberOfLines={1}
+                        >
+                          {
+                            STATUS_LABEL[
+                              mision.estado
+                            ]
+                          }
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )
+              )}
+            </View>
           </View>
-        </HardShadowCard>
+        </View>
+
+        {/* ========================================
+            FOOTER
+        ======================================== */}
+
+        <View style={styles.footer}>
+          <View style={styles.footerLine} />
+
+          <Text style={styles.footerText}>
+            MARVEL MANAGER
+          </Text>
+
+          <Text
+            style={styles.footerSubtext}
+          >
+            Sistema de gestión de
+            superhéroes y misiones
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -522,179 +810,144 @@ function StatCard({
   value: number;
 }) {
   return (
-    <HardShadowCard
-      shadowColor={tint}
-      style={styles.statCardWrap}
-      contentStyle={styles.statCard}
-    >
-      <View
-        style={[
-          styles.statIcon,
-          {
-            backgroundColor: tintSoft,
-            borderColor: tint,
-          },
-        ]}
-      >
-        <Feather
-          name={icon}
-          size={18}
-          color={tint}
-        />
+    <View style={styles.statCardWrap}>
+      <View style={styles.statCard}>
+        <View
+          style={[
+            styles.statIcon,
+            {
+              backgroundColor: tintSoft,
+              borderColor: tint,
+            },
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={18}
+            color={tint}
+          />
+        </View>
+
+        <Text
+          style={styles.statLabel}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
+          {label}
+        </Text>
+
+        <Text style={styles.statValue}>
+          {value}
+        </Text>
       </View>
-
-      <Text style={styles.statLabel}>
-        {label}
-      </Text>
-
-      <Text style={styles.statValue}>
-        {value}
-      </Text>
-    </HardShadowCard>
+    </View>
   );
 }
 
 // =====================================================
-// STYLES
+// ESTILOS
 // =====================================================
 
 const CARD_GAP = 16;
 
 const styles = StyleSheet.create({
-  screen: {
+  // ===================================================
+  // GENERAL
+  // ===================================================
+
+  container: {
     flex: 1,
     backgroundColor: colors.bg,
   },
 
-  centered: {
+  center: {
+    flex: 1,
+    backgroundColor: colors.bg,
     justifyContent: "center",
     alignItems: "center",
+    padding: 24,
   },
 
-  container: {
-    padding: 20,
-    paddingTop: 24,
-    paddingBottom: 48,
+  list: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 55,
   },
 
-  loadingText: {
-    color: colors.textMuted,
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 14,
+  // ===================================================
+  // HEADER
+  // ===================================================
+
+  header: {
+    width: "100%",
+    marginBottom: 20,
   },
 
-  // ================= ERROR =================
+  /*
+   * AQUÍ ESTÁ EL CAMBIO PRINCIPAL.
+   *
+   * La izquierda contiene:
+   * - MARVEL MANAGER
+   * - DASHBOARD
+   * - Resumen
+   * - MODO CONSULTA
+   *
+   * La derecha contiene:
+   * - LOGOUT
+   * - DATOS
+   *
+   * Así no quedan huecos artificiales.
+   */
 
-  errorBox: {
-    padding: 28,
+  headerLayout: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
+
+  headerRight: {
+    width: 68,
+    flexShrink: 0,
     alignItems: "center",
   },
 
-  errorTitle: {
-    color: colors.text,
-    fontSize: 18,
+  headerSmall: {
+    color: colors.red,
+    fontSize: 10,
     fontWeight: "900",
+    letterSpacing: 2,
     marginBottom: 6,
   },
 
-  errorText: {
-    color: colors.textMuted,
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 18,
-  },
-
-  retryButton: {
-    backgroundColor: colors.red,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: radii.sm,
-  },
-
-  retryButtonText: {
-    color: "#fff",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-
-  // ================= HEADER =================
-
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-  },
-
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  title: {
+  headerTitle: {
     color: colors.text,
-    fontSize: 30,
+    fontSize: 28,
+    lineHeight: 32,
     fontWeight: "900",
     letterSpacing: 0.5,
   },
 
-  subtitle: {
+  headerSubtitle: {
     color: colors.textMuted,
-    fontSize: 13.5,
-    marginTop: 10,
-    marginBottom: 24,
+    fontSize: 12.5,
+    marginTop: 6,
   },
 
-  // ================= USER =================
-
-  userChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.panelBorder,
-    borderRadius: radii.md,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    maxWidth: 130,
-  },
-
-  userAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.red,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-
-  userAvatarText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  userName: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  userRole: {
-    color: colors.textFaint,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginTop: 1,
-  },
-
-  // ================= LOGOUT =================
+  // ===================================================
+  // LOGOUT
+  // ===================================================
 
   logoutButton: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: radii.sm,
     backgroundColor: colors.red,
     borderWidth: 1.5,
@@ -705,126 +958,490 @@ const styles = StyleSheet.create({
 
   logoutPressed: {
     opacity: 0.7,
+    transform: [
+      {
+        scale: 0.96,
+      },
+    ],
   },
 
-  // ================= STATS =================
+  // ===================================================
+  // DATOS
+  // ===================================================
+
+  headerBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: radii.md,
+    backgroundColor: colors.red,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    justifyContent: "center",
+    alignItems: "center",
+
+    /*
+     * Solo 8px entre Logout y Datos.
+     * Esto elimina el hueco grande de la captura.
+     */
+    marginTop: 8,
+  },
+
+  headerBadgeNumber: {
+    color: "#fff",
+    fontSize: 19,
+    fontWeight: "900",
+    marginTop: 1,
+  },
+
+  headerBadgeText: {
+    color: "#fff",
+    fontSize: 7,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ===================================================
+  // USER / ROLE
+  // ===================================================
+
+  roleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+
+    /*
+     * Separa un poquito el usuario del subtítulo,
+     * pero sin crear el hueco enorme de antes.
+     */
+    marginTop: 12,
+
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+
+    borderRadius: radii.sm,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+
+    maxWidth: "100%",
+  },
+
+  roleIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: colors.redSoft,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+
+  roleInfo: {
+    minWidth: 0,
+  },
+
+  roleText: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  userWelcome: {
+    color: colors.textFaint,
+    fontSize: 9,
+    marginTop: 2,
+  },
+
+  // ===================================================
+  // STATS
+  // ===================================================
 
   statsGrid: {
+    width: "100%",
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: CARD_GAP + 6,
+    marginBottom: 4,
   },
 
   statCardWrap: {
-    width: "48%",
+    width: "48.2%",
     marginBottom: CARD_GAP,
   },
 
   statCard: {
-    padding: 16,
+    minHeight: 135,
+    padding: 15,
+    backgroundColor: colors.panel,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+
+    shadowColor: colors.ink,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+
+    elevation: 4,
   },
 
   statIcon: {
     width: 38,
     height: 38,
+    flexShrink: 0,
     borderRadius: radii.sm,
     borderWidth: 1.5,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 11,
   },
 
   statLabel: {
     color: colors.textMuted,
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "800",
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
 
   statValue: {
     color: colors.text,
-    fontSize: 24,
+    fontSize: 25,
+    lineHeight: 30,
     fontWeight: "900",
     marginTop: 4,
   },
 
-  // ================= SECTIONS =================
+  // ===================================================
+  // SECTION CARDS
+  // ===================================================
 
   sectionCard: {
+    width: "100%",
+    backgroundColor: colors.panel,
+    borderRadius: radii.lg,
     marginBottom: CARD_GAP + 4,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+
+    shadowColor: colors.ink,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+
+    elevation: 4,
   },
 
   sectionContent: {
     padding: 20,
   },
 
-  sectionTag: {
-    marginBottom: 12,
+  sectionLabel: {
+    color: colors.red,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 7,
   },
 
   sectionTitle: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 18,
+    lineHeight: 23,
     fontWeight: "900",
+    letterSpacing: 0.2,
   },
 
   sectionSubtitle: {
     color: colors.textMuted,
     fontSize: 12.5,
-    marginTop: 3,
+    lineHeight: 17,
+    marginTop: 4,
   },
 
-  // ================= DONUT =================
+  divider: {
+    height: 1,
+    backgroundColor: colors.panelBorder,
+    marginVertical: 16,
+  },
+
+  // ===================================================
+  // CHART
+  // ===================================================
+
+  chartContainer: {
+    width: "100%",
+  },
+
+  emptyChart: {
+    alignItems: "center",
+    paddingVertical: 22,
+    paddingHorizontal: 15,
+  },
+
+  emptyChartTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 10,
+  },
+
+  emptyChartText: {
+    color: colors.textMuted,
+    textAlign: "center",
+    fontSize: 11.5,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+
+  // ===================================================
+  // DONUT
+  // ===================================================
 
   donutRow: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 22,
-    gap: 18,
+    marginTop: 4,
+    gap: 12,
   },
 
-  // ================= MISSIONS =================
+  donutContainer: {
+    flexShrink: 0,
+  },
+
+  legendContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  // ===================================================
+  // MISSIONS
+  // ===================================================
 
   missionsList: {
-    marginTop: 8,
+    width: "100%",
   },
 
   missionRow: {
+    width: "100%",
+    minHeight: 62,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 13,
+    paddingVertical: 11,
     borderBottomWidth: 1,
     borderBottomColor: colors.panelBorder,
+    gap: 9,
   },
 
   missionIcon: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
+    flexShrink: 0,
     borderRadius: radii.sm,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.redSoft,
     borderWidth: 1,
-    borderColor: colors.panelBorder,
+    borderColor: colors.red,
     justifyContent: "center",
     alignItems: "center",
   },
 
+  missionInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
   missionTitle: {
     color: colors.text,
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "800",
   },
 
   missionLocation: {
     color: colors.textMuted,
-    fontSize: 11.5,
+    fontSize: 11,
+    lineHeight: 15,
     marginTop: 2,
+  },
+
+  missionStatus: {
+    width: 82,
+    flexShrink: 0,
+    alignItems: "flex-end",
+  },
+
+  statusTag: {
+    maxWidth: 82,
+    minHeight: 25,
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  statusTagText: {
+    color: "#fff",
+    fontSize: 7.5,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+    textAlign: "center",
+  },
+
+  // ===================================================
+  // EMPTY
+  // ===================================================
+
+  empty: {
+    alignItems: "center",
+    paddingVertical: 25,
+    paddingHorizontal: 20,
+  },
+
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.redSoft,
+    borderWidth: 1,
+    borderColor: colors.red,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "900",
+    marginTop: 14,
   },
 
   emptyText: {
     color: colors.textMuted,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 19,
+    fontSize: 12,
+  },
+
+  // ===================================================
+  // LOADING
+  // ===================================================
+
+  loadingLogo: {
+    width: 68,
+    height: 68,
+    borderRadius: radii.md,
+    backgroundColor: colors.red,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  loadingLogoText: {
+    color: "#fff",
+    fontSize: 42,
+    fontWeight: "900",
+  },
+
+  loadingTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 15,
+  },
+
+  loadingText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+
+  // ===================================================
+  // ERROR
+  // ===================================================
+
+  errorIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.redSoft,
+    borderWidth: 1.5,
+    borderColor: colors.red,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  errorTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  errorText: {
+    color: colors.textMuted,
+    textAlign: "center",
     fontSize: 13,
-    fontStyle: "italic",
+    lineHeight: 20,
+    maxWidth: 320,
+  },
+
+  retryButton: {
+    backgroundColor: colors.red,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: radii.sm,
+    marginTop: 22,
+  },
+
+  retryText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  // ===================================================
+  // FOOTER
+  // ===================================================
+
+  footer: {
+    alignItems: "center",
+    paddingTop: 5,
+    paddingBottom: 20,
+  },
+
+  footerLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: colors.red,
+    marginBottom: 10,
+  },
+
+  footerText: {
+    color: colors.text,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+
+  footerSubtext: {
+    color: colors.textFaint,
+    fontSize: 9,
+    marginTop: 4,
   },
 });
