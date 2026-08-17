@@ -3,6 +3,7 @@ import {
   Modal,
   View,
   Text,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { colors, radii } from "@/constants/theme";
+import { DEFAULT_HERO_IMAGE } from "@/constants/media";
 import { Input, Tag, HardShadowCard } from "./UI";
 import api from "@/services/api";
 
@@ -84,7 +86,9 @@ export default function HeroFormModal({
         nombre_real: formData.nombre_real,
         poder_principal: formData.poder_principal,
         nivel_poder: formData.nivel_poder,
-        imagen_url: formData.imagen_url || null,
+        // Si no cargó una URL, guardamos la imagen por defecto en vez de
+        // null, así el héroe nunca queda sin foto en ningún lado de la app.
+        imagen_url: formData.imagen_url?.trim() || DEFAULT_HERO_IMAGE,
         estado: formData.estado,
       };
 
@@ -144,6 +148,25 @@ export default function HeroFormModal({
                 </Pressable>
               </View>
 
+              {/* PREVIEW DE IMAGEN */}
+              <View style={styles.previewWrap}>
+                <Image
+                  source={{
+                    uri: formData.imagen_url?.trim() || DEFAULT_HERO_IMAGE,
+                  }}
+                  style={styles.previewImage}
+                />
+
+                {!formData.imagen_url?.trim() && (
+                  <View style={styles.previewBadge}>
+                    <Feather name="image" size={11} color={colors.text} />
+                    <Text style={styles.previewBadgeText}>
+                      IMAGEN POR DEFECTO
+                    </Text>
+                  </View>
+                )}
+              </View>
+
               {/* FORMULARIO */}
               <View style={styles.formGroup}>
                 <Input
@@ -186,7 +209,7 @@ export default function HeroFormModal({
 
               <View style={styles.formGroup}>
                 <Input
-                  label="URL de Imagen"
+                  label="URL de Imagen (opcional)"
                   icon="image"
                   placeholder="https://..."
                   value={formData.imagen_url || ""}
@@ -194,6 +217,8 @@ export default function HeroFormModal({
                     setFormData({ ...formData, imagen_url: text })
                   }
                   editable={!loading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
 
@@ -332,6 +357,44 @@ const styles = StyleSheet.create({
     right: 20,
     top: 20,
   },
+
+  previewWrap: {
+    width: "100%",
+    height: 150,
+    borderRadius: radii.lg,
+    overflow: "hidden",
+    backgroundColor: colors.ink,
+    borderWidth: 1.5,
+    borderColor: colors.panelBorder,
+    marginBottom: 20,
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  previewBadge: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(11, 11, 13, 0.75)",
+    borderWidth: 1,
+    borderColor: colors.panelBorder,
+    borderRadius: radii.sm,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  previewBadgeText: {
+    color: colors.text,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+
   formGroup: {
     marginBottom: 18,
   },
