@@ -9,9 +9,13 @@ import {
   Alert,
   Modal,
   ScrollView,
+  RefreshControl,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 import api from "@/services/api";
+import MisionFormModal from "@/components/MisionFormModal";
+import { colors } from "@/constants/theme";
 
 interface Mision {
   id: number;
@@ -27,14 +31,21 @@ interface Mision {
 export default function MisionesScreen() {
   const [misiones, setMisiones] = useState<Mision[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   const [misionSeleccionada, setMisionSeleccionada] =
     useState<Mision | null>(null);
 
-  const cargarMisiones = async () => {
+  // MODAL FORMULARIO
+  const [formModalVisible, setFormModalVisible] =
+    useState(false);
+  const [misionEdicion, setMisionEdicion] =
+    useState<Mision | null>(null);
+
+  const cargarMisiones = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      isRefresh ? setRefreshing(true) : setLoading(true);
       setError("");
 
       const response = await api.get("/misiones");
@@ -51,12 +62,59 @@ export default function MisionesScreen() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     cargarMisiones();
   }, []);
+
+  // =========================
+  // CRUD OPERATIONS
+  // =========================
+
+  const abrirFormularioCrear = () => {
+    setMisionEdicion(null);
+    setFormModalVisible(true);
+  };
+
+  const abrirFormularioEditar = (mision: Mision) => {
+    setMisionEdicion(mision);
+    setFormModalVisible(true);
+    setMisionSeleccionada(null);
+  };
+
+  const eliminarMision = async (
+    misionId: number,
+    tituloMision: string
+  ) => {
+    Alert.alert(
+      "Confirmar eliminación",
+      `¿Estás seguro de que deseas eliminar la misión "${tituloMision}"? Esta acción no se puede deshacer.`,
+      [
+        { text: "Cancelar", onPress: () => {}, style: "cancel" },
+        {
+          text: "Eliminar",
+          onPress: async () => {
+            try {
+              await api.delete(`/misiones/${misionId}`);
+              Alert.alert("Éxito", "Misión eliminada correctamente");
+              cargarMisiones();
+              setMisionSeleccionada(null);
+            } catch (error: any) {
+              Alert.alert(
+                "Error",
+                error.response?.data?.message ||
+                  "No se pudo eliminar la misión"
+              );
+            }
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
 
   const obtenerColorPeligro = (nivel: string) => {
     switch (nivel) {
@@ -263,7 +321,7 @@ export default function MisionesScreen() {
 
         <Pressable
           style={styles.retryButton}
-          onPress={cargarMisiones}
+          onPress={() => cargarMisiones(false)}
         >
           <Text style={styles.retryText}>
             REINTENTAR
@@ -312,8 +370,14 @@ export default function MisionesScreen() {
           renderItem={renderMision}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          onRefresh={cargarMisiones}
-          refreshing={loading}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => cargarMisiones(true)}
+              tintColor="#e62429"
+              colors={["#e62429"]}
+            />
+          }
         />
       )}
 
@@ -478,15 +542,78 @@ export default function MisionesScreen() {
                       CERRAR
                     </Text>
                   </Pressable>
+
+                  {/* ACCIONES CRUD */}
+                  <View style={styles.actionButtons}>
+                    <Pressable
+                      style={styles.editButton}
+                      onPress={() =>
+                        abrirFormularioEditar(
+                          misionSeleccionada
+                        )
+                      }
+                    >
+                      <Feather
+                        name="edit-2"
+                        size={16}
+                        color="#fff"
+                      />
+                      <Text
+                        style={styles.editButtonText}
+                      >
+                        EDITAR
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.deleteButton}
+                      onPress={() =>
+                        eliminarMision(
+                          misionSeleccionada.id,
+                          misionSeleccionada.titulo
+                        )
+                      }
+                    >
+                      <Feather
+                        name="trash-2"
+                        size={16}
+                        color="#fff"
+                      />
+                      <Text
+                        style={styles.deleteButtonText}
+                      >
+                        ELIMINAR
+                      </Text>
+                    </Pressable>
+                  </View>
                 </>
               )}
             </ScrollView>
           </View>
         </View>
       </Modal>
+
+      {/* =========================
+          MODAL FORMULARIO
+         ========================= */}
+      <MisionFormModal
+        visible={formModalVisible}
+        onClose={() => setFormModalVisible(false)}
+        onSuccess={() => {
+          cargarMisiones();
+        }}
+        mision={misionEdicion}
+      />
+
+      {/* BOTÓN CREAR */}
+      <Pressable
+        style={styles.createButton}
+        onPress={abrirFormularioCrear}
+      >
+        <Feather name="plus" size={24} color="#fff" />
+      </Pressable>
     </View>
   );
-  
 }
 
 const styles = StyleSheet.create({
@@ -841,5 +968,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 1,
+  },
+
+  // ACCIONES CRUD
+
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 14,
+  },
+
+  editButton: {
+    flex: 1,
+    backgroundColor: "#3f7fd1",
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  editButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  deleteButton: {
+    flex: 1,
+    backgroundColor: "#e62429",
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  // CREATE BUTTON
+
+  createButton: {
+    position: "absolute",
+    bottom: 30,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#e62429",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
 });

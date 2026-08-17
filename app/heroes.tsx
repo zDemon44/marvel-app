@@ -9,8 +9,9 @@ import {
   Pressable,
   RefreshControl,
   Modal,
+  Alert,
 } from "react-native";
-
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import api from "@/services/api";
 import {
@@ -18,6 +19,8 @@ import {
   addFavorite,
   removeFavorite,
 } from "@/services/favorites";
+import HeroFormModal from "@/components/HeroFormModal";
+import { colors } from "@/constants/theme";
 
 interface Heroe {
   id: number;
@@ -33,19 +36,26 @@ export default function HeroesScreen() {
   const [heroes, setHeroes] = useState<Heroe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
 
   const [heroeSeleccionado, setHeroeSeleccionado] =
     useState<Heroe | null>(null);
 
+  // MODAL FORMULARIO
+  const [formModalVisible, setFormModalVisible] =
+    useState(false);
+  const [heroeEdicion, setHeroeEdicion] =
+    useState<Heroe | null>(null);
+
   // =========================
   // CARGAR HÉROES
   // =========================
 
-  const cargarHeroes = async () => {
+  const cargarHeroes = async (isRefresh: boolean | any = false) => {
     try {
-      setLoading(true);
+      isRefresh ? setRefreshing(true) : setLoading(true);
       setError("");
 
       const response = await api.get("/heroes");
@@ -62,6 +72,7 @@ export default function HeroesScreen() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -105,17 +116,61 @@ export default function HeroesScreen() {
   };
 
   // =========================
+  // CRUD OPERATIONS
+  // =========================
+
+  const abrirFormularioCrear = () => {
+    setHeroeEdicion(null);
+    setFormModalVisible(true);
+  };
+
+  const abrirFormularioEditar = (heroe: Heroe) => {
+    setHeroeEdicion(heroe);
+    setFormModalVisible(true);
+    setHeroeSeleccionado(null);
+  };
+
+  const eliminarHeroe = async (heroeId: number, nombreHeroe: string) => {
+    Alert.alert(
+      "Confirmar eliminación",
+      `¿Estás seguro de que deseas eliminar a ${nombreHeroe}? Esta acción no se puede deshacer.`,
+      [
+        { text: "Cancelar", onPress: () => {}, style: "cancel" },
+        {
+          text: "Eliminar",
+          onPress: async () => {
+            try {
+              await api.delete(`/heroes/${heroeId}`);
+              Alert.alert("Éxito", "Superhéroe eliminado correctamente");
+              cargarHeroes();
+              setHeroeSeleccionado(null);
+            } catch (error: any) {
+              Alert.alert(
+                "Error",
+                error.response?.data?.message ||
+                  "No se pudo eliminar el superhéroe"
+              );
+            }
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
+
+  // =========================
   // INICIO
   // =========================
 
   useEffect(() => {
-  cargarHeroes();
-}, []);
-useFocusEffect(
-  useCallback(() => {
-    cargarFavoritos();
-  }, [])
-);
+    cargarHeroes();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarFavoritos();
+    }, [])
+  );
 
   // =========================
   // MOSTRAR DETALLES
@@ -324,7 +379,7 @@ useFocusEffect(
 
         <Pressable
           style={styles.retryButton}
-          onPress={cargarHeroes}
+          onPress={() => cargarHeroes(false)}
         >
           <Text style={styles.retryText}>
             REINTENTAR
@@ -379,8 +434,8 @@ useFocusEffect(
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={cargarHeroes}
+            refreshing={refreshing}
+            onRefresh={() => cargarHeroes(true)}
             tintColor="#e62429"
             colors={["#e62429"]}
           />
@@ -656,11 +711,76 @@ useFocusEffect(
                   </Text>
                 </Pressable>
 
+                {/* ACCIONES CRUD */}
+                <View style={styles.actionButtons}>
+                  <Pressable
+                    style={styles.editButton}
+                    onPress={() =>
+                      abrirFormularioEditar(
+                        heroeSeleccionado
+                      )
+                    }
+                  >
+                    <Feather
+                      name="edit-2"
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text
+                      style={styles.editButtonText}
+                    >
+                      EDITAR
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deleteButton}
+                    onPress={() =>
+                      eliminarHeroe(
+                        heroeSeleccionado.id,
+                        heroeSeleccionado.nombre
+                      )
+                    }
+                  >
+                    <Feather
+                      name="trash-2"
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text
+                      style={styles.deleteButtonText}
+                    >
+                      ELIMINAR
+                    </Text>
+                  </Pressable>
+                </View>
+
               </View>
             </View>
           )}
         </View>
       </Modal>
+
+      {/* =========================
+          MODAL FORMULARIO
+         ========================= */}
+      <HeroFormModal
+        visible={formModalVisible}
+        onClose={() => setFormModalVisible(false)}
+        onSuccess={() => {
+          cargarHeroes();
+          cargarFavoritos();
+        }}
+        heroe={heroeEdicion}
+      />
+
+      {/* BOTÓN CREAR */}
+      <Pressable
+        style={styles.createButton}
+        onPress={abrirFormularioCrear}
+      >
+        <Feather name="plus" size={24} color="#fff" />
+      </Pressable>
     </View>
   );
 }
@@ -1390,5 +1510,68 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 1.2,
+  },
+
+  // ACCIONES CRUD
+
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 14,
+  },
+
+  editButton: {
+    flex: 1,
+    backgroundColor: "#3f7fd1",
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  editButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  deleteButton: {
+    flex: 1,
+    backgroundColor: "#e62429",
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  // CREATE BUTTON
+
+  createButton: {
+    position: "absolute",
+    bottom: 30,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#e62429",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
 });

@@ -1,6 +1,22 @@
 import { Tabs } from "expo-router";
 import React from "react";
-import { Text } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { colors } from "../../constants/theme";
+
+function TabIcon({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.iconPill, focused && styles.iconPillActive]}>
+      {children}
+    </View>
+  );
+}
 
 export default function TabLayout() {
   return (
@@ -8,40 +24,44 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
 
-        tabBarActiveTintColor: "#e62429",
-        tabBarInactiveTintColor: "#777",
+        tabBarActiveTintColor: colors.red,
+        tabBarInactiveTintColor: colors.textMuted,
 
         tabBarStyle: {
-          backgroundColor: "#0d0d0d",
-          borderTopColor: "#292929",
+          backgroundColor: colors.ink,
+          borderTopColor: colors.panelBorder,
           borderTopWidth: 1,
-          height: 65,
-          paddingBottom: 8,
-          paddingTop: 7,
+          height: 68,
+          paddingBottom: 10,
+          paddingTop: 8,
         },
 
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "800",
+          letterSpacing: 0.3,
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Inicio",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 22 }}>⌂</Text>
-          ),
-        }}
-      />
-
+    <Tabs.Screen
+      name="home"
+      options={{
+        title: "Inicio",
+        tabBarIcon: ({ color, focused }) => (
+          <TabIcon focused={focused}>
+            <Feather name="home" size={20} color={color} />
+          </TabIcon>
+        ),
+      }}
+    />
       <Tabs.Screen
         name="heroes"
         options={{
           title: "Héroes",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 22 }}>★</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <Feather name="shield" size={20} color={color} />
+            </TabIcon>
           ),
         }}
       />
@@ -50,8 +70,10 @@ export default function TabLayout() {
         name="misiones"
         options={{
           title: "Misiones",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 22 }}>◆</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <Feather name="target" size={20} color={color} />
+            </TabIcon>
           ),
         }}
       />
@@ -60,8 +82,14 @@ export default function TabLayout() {
         name="favoritos"
         options={{
           title: "Favoritos",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 22 }}>♥</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <Ionicons
+                name={focused ? "heart" : "heart-outline"}
+                size={20}
+                color={color}
+              />
+            </TabIcon>
           ),
         }}
       />
@@ -75,3 +103,16 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconPill: {
+    width: 38,
+    height: 30,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconPillActive: {
+    backgroundColor: colors.redSoft,
+  },
+});
